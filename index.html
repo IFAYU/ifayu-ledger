@@ -124,6 +124,9 @@ button{cursor:pointer; border:none; background:none}
 .seg button[aria-pressed="true"]{background:var(--card); box-shadow:var(--shadow)}
 .seg button[data-t="income"][aria-pressed="true"]{color:var(--gain)}
 .seg button[data-t="expense"][aria-pressed="true"]{color:var(--loss)}
+.seg button[data-t="extra"][aria-pressed="true"]{color:var(--accent-ink)}
+.row.extra .v{color:var(--ink-3)}
+.row .tag.x{background:var(--sunk); color:var(--ink-2)}
 
 /* 分類格 */
 .cats{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:12px 14px}
@@ -255,9 +258,10 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
   <!-- 記一筆 -->
   <section class="pane on" id="pane-add">
     <div class="card" style="padding-bottom:2px">
-      <div class="seg" role="group" aria-label="收入或支出">
+      <div class="seg" role="group" aria-label="收入、支出或額外">
         <button data-t="expense" aria-pressed="false">支出</button>
         <button data-t="income" aria-pressed="true">收入</button>
+        <button data-t="extra" aria-pressed="false">額外</button>
       </div>
       <div class="cats" id="catGrid"></div>
       <div class="entry">
@@ -320,8 +324,9 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
     <div class="card">
       <div class="card-h"><h2>分類管理</h2></div>
       <div class="seg" role="group" aria-label="管理哪一種分類" id="setSeg">
-        <button data-t="expense" aria-pressed="false">支出分類</button>
-        <button data-t="income" aria-pressed="true">收入分類</button>
+        <button data-t="expense" aria-pressed="false">支出</button>
+        <button data-t="income" aria-pressed="true">收入</button>
+        <button data-t="extra" aria-pressed="false">額外</button>
       </div>
       <div id="setCats"></div>
       <div class="bar"><button class="btn wide ghost" id="addCat2">＋ 新增分類</button></div>
@@ -558,12 +563,14 @@ function beginCatDrag(btn, cat, list, sx, sy){
   document.addEventListener("pointercancel", end);
 }
 
+const TYPE_LABEL = { income:"收入", expense:"支出", extra:"額外" };
 function newCategory(type){
-  dialog("新增" + (type==="income"?"收入":"支出") + "分類", [
+  dialog("新增" + (TYPE_LABEL[type]||"") + "分類", [
     {k:"name", label:"分類名稱", type:"text", required:true}
   ], v=>{
     const n = v.name.trim();
     if(!n) return;
+    if(!B().cats[type]) B().cats[type] = [];
     if(B().cats[type].includes(n)) return toast("這個分類已經有了");
     B().cats[type].push(n); save();
     if(type === ui.type) ui.cat = n;
@@ -623,16 +630,19 @@ function renderList(){
   es.forEach(e => (days[e.date] = days[e.date] || []).push(e));
   Object.keys(days).sort().reverse().forEach(date=>{
     const list = days[date];
-    const net = list.reduce((s,e)=> s + (e.type==="income" ? e.amount : -e.amount), 0);
+    const net = list.reduce((s,e)=> s + (e.type==="income" ? e.amount : e.type==="expense" ? -e.amount : 0), 0);
     const wrap = document.createElement("div"); wrap.className = "day";
     const wd = "日一二三四五六"[new Date(date+"T00:00:00").getDay()];
     wrap.innerHTML = `<div class="day-h"><span class="num">${date.slice(5).replace("-","/")} 星期${wd}</span>
       <span class="num ${net<0?"loss":"gain"}">${money(net)}</span></div>`;
     list.forEach(e=>{
-      const r = document.createElement("div"); r.className = "row";
-      r.innerHTML = `${e.rid ? '<span class="tag">常態</span>' : ''}
+      const isX = e.type==="extra";
+      const r = document.createElement("div"); r.className = "row" + (isX?" extra":"");
+      const tag = e.rid ? '<span class="tag">常態</span>' : (isX ? '<span class="tag x">額外</span>' : '');
+      const sign = e.type==="income" ? "+" : e.type==="expense" ? "-" : "";
+      r.innerHTML = `${tag}
         <span class="nm"><b>${esc(e.cat)}</b>${e.note ? `<small>${esc(e.note)}</small>` : ""}</span>
-        <span class="v ${e.type==="income"?"gain":"loss"}">${e.type==="income"?"+":"-"}${money(e.amount).replace("$","$")}</span>
+        <span class="v ${e.type==="income"?"gain":e.type==="expense"?"loss":""}">${sign}${money(e.amount).replace("$","$")}</span>
         <button class="del" aria-label="刪除">✕</button>`;
       r.querySelector(".del").onclick = ()=>{
         if(!confirm(`刪除「${e.cat}」${money(e.amount)}？`)) return;
@@ -891,6 +901,7 @@ $("#prevM").onclick = ()=> shiftMonth(-1);
 $("#nextM").onclick = ()=> shiftMonth(1);
 
 function renderAll(){
+  Object.values(S.books).forEach(b=>{ if(!b.cats.extra) b.cats.extra = []; });  // 舊資料補「額外」分類欄
   document.documentElement.dataset.book = ui.book;
   renderSummary(); renderCats(); renderList(); renderRec(); renderStat(); renderSetCats();
 }
