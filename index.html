@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="記帳">
+<meta name="apple-mobile-web-app-title" content="App">
 <meta name="theme-color" content="#F6F3EE">
 <meta name="robots" content="noindex,nofollow,noarchive">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128210;</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128241;</text></svg>">
 </head>
 <body>
 <title>雙帳本記帳｜蘿荔 × ROLMIE</title>
@@ -132,6 +132,14 @@ button{cursor:pointer; border:none; background:none}
      word-break:break-all; transition:border-color .15s, background .15s}
 .cat[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink); font-weight:600}
 .cat.add{border-style:dashed; color:var(--ink-3)}
+.cat.drag-hint{grid-column:1/-1; min-height:0; padding:2px 3px 0; border:none; background:none;
+     color:var(--ink-3); font-size:11px; letter-spacing:.02em; place-items:center; pointer-events:none}
+.cat.placeholder{opacity:.28}
+.cat.ghost{box-shadow:0 14px 34px rgba(0,0,0,.30); border-color:var(--accent);
+     background:var(--accent-soft); color:var(--accent-ink); font-weight:600; opacity:.96;
+     transition:none; touch-action:none}
+:root.dragging, :root.dragging body{overflow:hidden !important; touch-action:none; overscroll-behavior:none}
+:root.dragging .cats{touch-action:none}
 
 /* 輸入列 */
 .entry{margin:0 14px; display:flex; flex-direction:column; gap:8px}
@@ -177,6 +185,10 @@ input:focus-visible,select:focus-visible,button:focus-visible,.cat:focus-visible
 .pill{font-size:11px; padding:4px 9px; border-radius:999px; border:1px solid var(--line-2);
       color:var(--ink-2); flex:none}
 .pill.on{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink)}
+.pill.done{background:var(--sunk); border-color:var(--line); color:var(--ink-3)}
+.rec .plan{display:inline-block; margin-top:2px; font-size:11px; color:var(--accent-ink);
+     background:var(--accent-soft); border-radius:999px; padding:1px 8px; letter-spacing:.02em}
+.rec .plan.warn{color:var(--loss); background:transparent; padding:0}
 .btn{padding:9px 14px; border-radius:10px; background:var(--accent); color:var(--on-accent);
      font-weight:600; font-size:13px}
 .btn.ghost{background:transparent; border:1px solid var(--line-2); color:var(--ink-2); font-weight:500}
@@ -429,14 +441,87 @@ function renderCats(){
   list.forEach(c=>{
     const b = document.createElement("button");
     b.className = "cat"; b.textContent = c;
+    if(sort && sort.active && c === sort.cat) b.classList.add("placeholder");
     b.setAttribute("aria-pressed", String(c === ui.cat));
-    b.onclick = ()=>{ ui.cat = c; renderCats(); };
+    b.onclick = ()=>{ if(suppressClick) return; ui.cat = c; renderCats(); };
+    b.addEventListener("pointerdown", ev => startCatPress(ev, b, c));
     g.appendChild(b);
   });
   const add = document.createElement("button");
   add.className = "cat add"; add.textContent = "＋ 分類";
   add.onclick = ()=> newCategory(ui.type);
   g.appendChild(add);
+  const hint = document.createElement("div");
+  hint.className = "cat drag-hint"; hint.textContent = "長按分類可拖曳排序";
+  g.appendChild(hint);
+}
+
+/* ---------- 分類長按拖曳排序 ---------- */
+let sort = null, suppressClick = false;
+function startCatPress(e, btn, cat){
+  if(sort || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const list = B().cats[ui.type];
+  if(list.length < 2) return;
+  const sx = e.clientX, sy = e.clientY;
+  let timer = setTimeout(lift, 220);
+  function moveWatch(ev){
+    if(Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10){ cleanup(); }
+  }
+  function upWatch(){ cleanup(); }
+  function cleanup(){
+    clearTimeout(timer);
+    document.removeEventListener("pointermove", moveWatch);
+    document.removeEventListener("pointerup", upWatch);
+    document.removeEventListener("pointercancel", upWatch);
+  }
+  document.addEventListener("pointermove", moveWatch, {passive:true});
+  document.addEventListener("pointerup", upWatch);
+  document.addEventListener("pointercancel", upWatch);
+  function lift(){
+    cleanup();
+    if(navigator.vibrate) navigator.vibrate(15);
+    beginCatDrag(btn, cat, list, sx, sy);
+  }
+}
+function beginCatDrag(btn, cat, list, sx, sy){
+  const rect = btn.getBoundingClientRect();
+  const ghost = btn.cloneNode(true);
+  ghost.className = "cat ghost";
+  Object.assign(ghost.style, {position:"fixed", left:rect.left+"px", top:rect.top+"px",
+    width:rect.width+"px", height:rect.height+"px", margin:"0", zIndex:"9999",
+    pointerEvents:"none", transform:"scale(1.06)"});
+  document.body.appendChild(ghost);
+  const offX = sx - rect.left, offY = sy - rect.top;
+  document.documentElement.classList.add("dragging");
+  sort = {cat, active:true};
+  renderCats();
+  function move(ev){
+    ev.preventDefault();
+    ghost.style.left = (ev.clientX - offX) + "px";
+    ghost.style.top  = (ev.clientY - offY) + "px";
+    const t = document.elementFromPoint(ev.clientX, ev.clientY);
+    const tb = t && t.closest("#catGrid .cat:not(.add):not(.drag-hint)");
+    if(tb){
+      const targetCat = tb.textContent;
+      if(targetCat && targetCat !== cat){
+        const from = list.indexOf(cat), to = list.indexOf(targetCat);
+        if(from > -1 && to > -1){ list.splice(to, 0, list.splice(from, 1)[0]); renderCats(); }
+      }
+    }
+  }
+  function end(){
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", end);
+    document.removeEventListener("pointercancel", end);
+    ghost.remove();
+    document.documentElement.classList.remove("dragging");
+    sort = null; save(); renderCats();
+    suppressClick = true; setTimeout(()=> suppressClick = false, 350);
+    toast("分類順序已更新");
+  }
+  document.addEventListener("pointermove", move, {passive:false});
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
 }
 
 function newCategory(type){
@@ -529,19 +614,57 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 
 /* ---------- 常態 ---------- */
 const recDone = r => B().entries.some(e => e.rid === r.id && e.date.slice(0,7) === ui.month);
+const monthDiff = (a,b) => { const [ay,am]=a.split("-").map(Number),[by,bm]=b.split("-").map(Number);
+  return (by-ay)*12 + (bm-am); };
+const fmtMonth = m => { const [y,mo]=m.split("-"); return `${y}/${mo}`; };
+
+// 分期資訊：無 until 回傳 null（＝永久常態）
+function recPlan(r){
+  if(!r.until) return null;
+  const cur = ui.month;
+  const start = r.start || cur;
+  const total = monthDiff(start, r.until) + 1;
+  const remaining = monthDiff(cur, r.until) + 1;   // 含本月到截止月
+  const period = monthDiff(start, cur) + 1;          // 本月是第幾期
+  return {
+    total, remaining: Math.max(0, remaining), period,
+    finished: monthDiff(cur, r.until) < 0,           // 本月已超過截止月
+    notStarted: monthDiff(start, cur) < 0            // 本月還沒到起始月
+  };
+}
+// 本月是否該帶入（分期未開始或已繳完則否）
+function recApplicable(r){
+  const p = recPlan(r);
+  return !p || (!p.finished && !p.notStarted);
+}
 
 function renderRec(){
   const body = $("#recBody"); body.innerHTML = "";
   const rs = B().recurring;
-  if(!rs.length){ body.innerHTML = '<p class="hint">還沒有常態項目。把每月一定會有的房租、薪水、系統月費設定進來。</p>'; }
+  if(!rs.length){ body.innerHTML = '<p class="hint">還沒有常態項目。把每月一定會有的房租、薪水、系統月費設定進來。分期付款可設「繳款截止月」，會自動顯示剩餘期數。</p>'; }
   rs.forEach(r=>{
     const done = recDone(r);
+    const p = recPlan(r);
+    let planLine = "";
+    if(p){
+      if(p.finished) planLine = `<span class="plan done">已繳完 · 共 ${p.total} 期</span>`;
+      else if(p.notStarted) planLine = `<span class="plan">${fmtMonth(r.start)} 起 · 共 ${p.total} 期</span>`;
+      else planLine = `<span class="plan${p.remaining<=1?" warn":""}">第 ${p.period}/${p.total} 期 · 剩 ${p.remaining} 期 · 繳到 ${fmtMonth(r.until)}</span>`;
+    }
+    let pillTxt, pillCls = "";
+    if(p && p.finished){ pillTxt = "已繳完"; pillCls = "done"; }
+    else if(done){ pillTxt = "本月已記"; pillCls = "on"; }
+    else if(!r.active){ pillTxt = "已停用"; }
+    else if(p && p.notStarted){ pillTxt = "未開始"; pillCls = "done"; }
+    else pillTxt = "待帶入";
     const el = document.createElement("div"); el.className = "rec";
     el.innerHTML = `<span class="nm"><b>${esc(r.cat)}</b>
-        <small>每月 ${r.day} 日 · ${r.type==="income"?"收入":"支出"} ${money(r.amount)}${r.note?" · "+esc(r.note):""}</small></span>
-      <span class="pill ${done?"on":""}">${done ? "本月已記" : (r.active ? "待帶入" : "已停用")}</span>
+        <small>每月 ${r.day} 日 · ${r.type==="income"?"收入":"支出"} ${money(r.amount)}${r.note?" · "+esc(r.note):""}</small>
+        ${planLine}</span>
+      <span class="pill ${pillCls}">${pillTxt}</span>
       <button class="del" aria-label="刪除">✕</button>`;
     el.querySelector(".pill").onclick = ()=>{
+      if(p && p.finished) return toast("這筆分期已經繳完了");
       if(done) return toast("本月已經帶入過了");
       r.active = !r.active; save(); renderRec();
     };
@@ -560,19 +683,28 @@ $("#addRec").onclick = ()=>{
     {k:"cat", label:"分類", type:"select", options:cats},
     {k:"amount", label:"每月金額", type:"number", required:true},
     {k:"day", label:"每月幾號", type:"number", value:"5"},
+    {k:"start", label:"起始月（分期用，預設本月）", type:"month", value:ui.month},
+    {k:"until", label:"繳款截止月（選填，分期才填）", type:"month"},
     {k:"note", label:"備註（選填）", type:"text"}
   ], v=>{
     const [type, cat] = v.cat.split("|");
     const amount = Math.abs(Math.round(Number(v.amount)));
     if(!amount) return toast("金額不能是 0");
-    B().recurring.push({ id:uid(), type, cat, amount,
-      day: Math.min(28, Math.max(1, Number(v.day)||1)), note:(v.note||"").trim(), active:true });
-    save(); renderRec(); toast("已新增常態項目");
+    const rec = { id:uid(), type, cat, amount,
+      day: Math.min(28, Math.max(1, Number(v.day)||1)), note:(v.note||"").trim(), active:true };
+    if(v.until){
+      const start = v.start || ui.month;
+      if(monthDiff(start, v.until) < 0) return toast("截止月不能早於起始月");
+      rec.start = start; rec.until = v.until;
+    }
+    B().recurring.push(rec);
+    save(); renderRec();
+    toast(rec.until ? `已新增分期（共 ${monthDiff(rec.start, rec.until)+1} 期）` : "已新增常態項目");
   });
 };
 
 $("#applyRec").onclick = ()=>{
-  const pend = B().recurring.filter(r => r.active && !recDone(r));
+  const pend = B().recurring.filter(r => r.active && !recDone(r) && recApplicable(r));
   if(!pend.length) return toast("本月的常態項目都記完了");
   pend.forEach(r=>{
     B().entries.push({ id:uid(), rid:r.id, date:`${ui.month}-${pad2(r.day)}`,
@@ -733,19 +865,19 @@ resetCalc();
 renderAll();
 </script>
 
-<div id="gate" style="position:fixed;inset:0;z-index:999;background:var(--paper);display:grid;place-items:center;padding:24px">
+<div id="gate" style="position:fixed;inset:0;z-index:999;background:var(--paper,#fff);display:grid;place-items:center;padding:24px">
   <form id="gateForm" style="width:min(100%,280px);display:flex;flex-direction:column;gap:12px;text-align:center">
-    <div style="font-family:var(--font-display);font-size:22px">雙帳本記帳</div>
-    <div style="font-size:12px;color:var(--ink-3);letter-spacing:.1em">蘿荔 × ROLMIE</div>
+    <div style="font-family:var(--font-display,serif);font-size:22px">App</div>
+    <div style="font-size:12px;color:var(--ink-3,#999);letter-spacing:.1em"></div>
     <input id="gatePw" type="password" inputmode="numeric" placeholder="密碼" autocomplete="current-password"
            style="text-align:center;letter-spacing:.4em;font-size:18px">
     <button class="btn wide" type="submit">進入</button>
-    <div id="gateErr" style="font-size:12px;color:var(--loss);min-height:16px"></div>
+    <div id="gateErr" style="font-size:12px;color:var(--loss,#c0503f);min-height:16px"></div>
   </form>
 </div>
 <script>
 (function(){
-  var PW = "0000", K = "gate.ok.v1";
+  var PW = '0000', K = "gate.ok.v1";
   var g = document.getElementById("gate");
   function open_(){ g.remove(); }
   if(localStorage.getItem(K) === "1") return open_();
