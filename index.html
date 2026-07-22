@@ -258,10 +258,10 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
   <!-- 記一筆 -->
   <section class="pane on" id="pane-add">
     <div class="card" style="padding-bottom:2px">
-      <div class="seg" role="group" aria-label="收入、支出或額外">
+      <div class="seg" role="group" aria-label="收入、支出或學生叫貨">
         <button data-t="expense" aria-pressed="false">支出</button>
         <button data-t="income" aria-pressed="true">收入</button>
-        <button data-t="extra" aria-pressed="false">額外</button>
+        <button data-t="extra" aria-pressed="false">學生叫貨</button>
       </div>
       <div class="cats" id="catGrid"></div>
       <div class="entry">
@@ -326,7 +326,7 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
       <div class="seg" role="group" aria-label="管理哪一種分類" id="setSeg">
         <button data-t="expense" aria-pressed="false">支出</button>
         <button data-t="income" aria-pressed="true">收入</button>
-        <button data-t="extra" aria-pressed="false">額外</button>
+        <button data-t="extra" aria-pressed="false">學生叫貨</button>
       </div>
       <div id="setCats"></div>
       <div class="bar"><button class="btn wide ghost" id="addCat2">＋ 新增分類</button></div>
@@ -563,7 +563,7 @@ function beginCatDrag(btn, cat, list, sx, sy){
   document.addEventListener("pointercancel", end);
 }
 
-const TYPE_LABEL = { income:"收入", expense:"支出", extra:"額外" };
+const TYPE_LABEL = { income:"收入", expense:"支出", extra:"學生叫貨" };
 function newCategory(type){
   dialog("新增" + (TYPE_LABEL[type]||"") + "分類", [
     {k:"name", label:"分類名稱", type:"text", required:true}
@@ -638,7 +638,7 @@ function renderList(){
     list.forEach(e=>{
       const isX = e.type==="extra";
       const r = document.createElement("div"); r.className = "row" + (isX?" extra":"");
-      const tag = e.rid ? '<span class="tag">常態</span>' : (isX ? '<span class="tag x">額外</span>' : '');
+      const tag = e.rid ? '<span class="tag">常態</span>' : (isX ? '<span class="tag x">叫貨</span>' : '');
       const sign = e.type==="income" ? "+" : e.type==="expense" ? "-" : "";
       r.innerHTML = `${tag}
         <span class="nm"><b>${esc(e.cat)}</b>${e.note ? `<small>${esc(e.note)}</small>` : ""}</span>
@@ -901,7 +901,7 @@ $("#prevM").onclick = ()=> shiftMonth(-1);
 $("#nextM").onclick = ()=> shiftMonth(1);
 
 function renderAll(){
-  Object.values(S.books).forEach(b=>{ if(!b.cats.extra) b.cats.extra = []; });  // 舊資料補「額外」分類欄
+  Object.values(S.books).forEach(b=>{ if(!b.cats.extra) b.cats.extra = ["學生叫貨"]; });  // 舊資料補「學生叫貨」分類欄
   document.documentElement.dataset.book = ui.book;
   renderSummary(); renderCats(); renderList(); renderRec(); renderStat(); renderSetCats();
 }
