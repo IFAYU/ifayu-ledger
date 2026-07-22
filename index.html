@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="App">
+<meta name="apple-mobile-web-app-title" content="雙帳本記帳">
 <meta name="theme-color" content="#F6F3EE">
 <meta name="robots" content="noindex,nofollow,noarchive">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128241;</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
 </head>
 <body>
 <title>雙帳本記帳｜蘿荔 × ROLMIE</title>
@@ -327,12 +327,22 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
       <div class="bar"><button class="btn wide ghost" id="addCat2">＋ 新增分類</button></div>
     </div>
     <div class="card">
+      <div class="card-h"><h2>帳號與雲端</h2></div>
+      <div class="rec"><span class="nm"><b>登入身分</b><small id="authEmail">—</small></span>
+        <span class="pill on" id="cloudState">雲端同步中</span></div>
+      <div class="bar" style="border-top:none">
+        <button class="btn ghost" id="cloudRefresh" style="flex:1">從雲端重新整理</button>
+        <button class="btn ghost" id="signOut" style="flex:1">登出</button>
+      </div>
+      <p class="hint" style="padding-top:0">資料即時同步到你的私人雲端（Firebase），手機／電腦／自動化程式讀寫同一份。只保留最近 2 個月，較舊的自動清除。</p>
+    </div>
+    <div class="card">
       <div class="card-h"><h2>資料備份</h2></div>
       <div class="bar" style="border-top:none">
         <button class="btn ghost" id="expJson" style="flex:1">匯出備份檔</button>
         <button class="btn ghost" id="impJson" style="flex:1">匯入還原</button>
       </div>
-      <p class="hint" style="padding-top:0">資料只存在這台手機的瀏覽器裡。換手機或清除瀏覽器資料前，先匯出一份備份檔。</p>
+      <p class="hint" style="padding-top:0">雲端已自動保存。仍可匯出一份 JSON 存查，或從備份檔還原覆蓋。</p>
     </div>
   </section>
 
@@ -348,6 +358,23 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
 <dialog id="dlg"><form method="dialog" class="dlg-b" id="dlgForm"></form></dialog>
 <div class="toast" id="toast"></div>
 <input type="file" id="fileIn" accept="application/json" hidden>
+
+<!-- Firebase SDK（雲端同步） -->
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+<!-- 登入畫面 -->
+<div id="auth-gate" style="position:fixed;inset:0;z-index:200;background:var(--paper);display:grid;place-items:center;padding:24px">
+  <form id="auth-form" style="width:min(100%,300px);display:flex;flex-direction:column;gap:12px;text-align:center">
+    <div style="font-family:var(--font-display);font-size:23px;color:var(--ink)">雙帳本記帳</div>
+    <div style="font-size:12px;color:var(--ink-3);letter-spacing:.08em">蘿荔 × ROLMIE ｜ 雲端同步</div>
+    <input id="auth-pw" type="password" inputmode="text" placeholder="登入密碼" autocomplete="current-password"
+           style="text-align:center;font-size:17px;padding:12px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);color:var(--ink)">
+    <button class="btn wide" type="submit">登入</button>
+    <div id="auth-err" style="font-size:12px;color:var(--loss);min-height:16px"></div>
+  </form>
+</div>
 
 <script>
 "use strict";
@@ -378,11 +405,11 @@ const today = new Date();
 const pad2 = n => String(n).padStart(2,"0");
 const ymd = d => d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());
 
-let S = load();
+let S = loadLocalCache();
 let ui = { book:"luoli", month:ymd(today).slice(0,7), type:"income", cat:null, setType:"income", pane:"add" };
 let calc = { acc:0, op:null, cur:"0" };
 
-function load(){
+function loadLocalCache(){
   try{
     const raw = localStorage.getItem(KEY);
     if(raw){
@@ -392,7 +419,14 @@ function load(){
   }catch(e){}
   return { books: structuredClone(SEED) };
 }
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ toast("儲存空間已滿，請先匯出備份"); } }
+let saveT;
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+  if(HAS_FB && fbUser){
+    clearTimeout(saveT);
+    saveT = setTimeout(()=>{ docRef().set(S).catch(()=> toast("雲端儲存稍後自動重試")); }, 600);
+  }
+}
 const B = () => S.books[ui.book];
 const uid = () => Math.random().toString(36).slice(2,9) + Date.now().toString(36);
 
@@ -868,11 +902,7 @@ function applyUrlImport(){
   try{ p = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); }
   catch(e){ return; }
   try{ history.replaceState(null, "", location.pathname + location.search); }catch(e){}
-  const start = ()=> confirmImport(p);
-  if(document.getElementById("gate")){
-    const t = setInterval(()=>{ if(!document.getElementById("gate")){ clearInterval(t); start(); } }, 250);
-    setTimeout(()=> clearInterval(t), 60000);
-  }else start();
+  confirmImport(p);
 }
 function confirmImport(p){
   if(!p || !p.book || !S.books[p.book]) return;
@@ -904,39 +934,89 @@ function confirmImport(p){
   toast(`已匯入 ${items.length} 筆到「${bkName}」`);
 }
 
+/* ---------- Firebase 雲端同步 + 登入 ---------- */
+const HAS_FB = typeof firebase !== "undefined";
+const LOGIN_EMAIL = "missyou52049@gmail.com";
+let auth=null, db=null, fbUser=null;
+const docRef = () => db.collection("ledger").doc(fbUser.uid);
+
+// 只保留最近 2 個月（本月＋上月），較舊自動清除
+function purgeOld(){
+  const d = new Date(today.getFullYear(), today.getMonth()-1, 1);
+  const cut = ymd(d).slice(0,7);
+  let removed = 0;
+  Object.values(S.books).forEach(b=>{
+    const n = b.entries.length;
+    b.entries = b.entries.filter(e => (e.date||"").slice(0,7) >= cut);
+    removed += n - b.entries.length;
+  });
+  return removed;
+}
+async function cloudLoad(){
+  try{
+    const snap = await docRef().get();
+    if(snap.exists && snap.data() && snap.data().books){ S = snap.data(); }
+    else{ await docRef().set(S); }   // 第一次：把目前資料推上雲
+  }catch(e){ /* 離線：沿用本機快取 */ }
+}
+function showLogin(show){ const g=$("#auth-gate"); if(g) g.style.display = show?"grid":"none"; }
+function markCloud(){ const e=$("#authEmail"); if(e) e.textContent = fbUser?LOGIN_EMAIL:"（未登入）";
+  const s=$("#cloudState"); if(s){ s.textContent = fbUser?"雲端同步中":"離線"; s.className = "pill"+(fbUser?" on":""); } }
+
 $("#dateIn").value = ymd(today);
 resetCalc();
-renderAll();
-applyUrlImport();
-</script>
 
-<div id="gate" style="position:fixed;inset:0;z-index:999;background:var(--paper,#fff);display:grid;place-items:center;padding:24px">
-  <form id="gateForm" style="width:min(100%,280px);display:flex;flex-direction:column;gap:12px;text-align:center">
-    <div style="font-family:var(--font-display,serif);font-size:22px">App</div>
-    <div style="font-size:12px;color:var(--ink-3,#999);letter-spacing:.1em"></div>
-    <input id="gatePw" type="password" inputmode="numeric" placeholder="密碼" autocomplete="current-password"
-           style="text-align:center;letter-spacing:.4em;font-size:18px">
-    <button class="btn wide" type="submit">進入</button>
-    <div id="gateErr" style="font-size:12px;color:var(--loss,#c0503f);min-height:16px"></div>
-  </form>
-</div>
-<script>
-(function(){
-  var PW = '0000', K = "gate.ok.v1";
-  var g = document.getElementById("gate");
-  function open_(){ g.remove(); }
-  if(localStorage.getItem(K) === "1") return open_();
-  document.getElementById("gateForm").addEventListener("submit", function(ev){
+if(HAS_FB){
+  firebase.initializeApp({
+    apiKey:"AIzaSyDEqw-2W7yQSVJTw3cASImczMGLlHzjO5E",
+    authDomain:"claude-ai-8e10f.firebaseapp.com",
+    projectId:"claude-ai-8e10f",
+    storageBucket:"claude-ai-8e10f.firebasestorage.app",
+    messagingSenderId:"767463505181",
+    appId:"1:767463505181:web:2075ef8c76b59f88f235f4"
+  });
+  auth = firebase.auth();
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+  db = firebase.firestore();
+  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+
+  $("#auth-form").addEventListener("submit", async ev=>{
     ev.preventDefault();
-    if(document.getElementById("gatePw").value === PW){
-      localStorage.setItem(K,"1"); open_();
+    $("#auth-err").textContent = "登入中…";
+    try{ await auth.signInWithEmailAndPassword(LOGIN_EMAIL, $("#auth-pw").value); }
+    catch(e){ $("#auth-err").textContent = "密碼不對，再試一次"; $("#auth-pw").value=""; }
+  });
+
+  auth.onAuthStateChanged(async user=>{
+    fbUser = user;
+    if(user){
+      showLogin(false);
+      await cloudLoad();
+      if(purgeOld()>0) save();
+      markCloud(); renderAll();
+      applyUrlImport();
     }else{
-      document.getElementById("gateErr").textContent = "密碼不對，再試一次";
-      document.getElementById("gatePw").value = "";
+      showLogin(true); markCloud();
+      const pw=$("#auth-pw"); if(pw){ pw.value=""; pw.focus(); }
     }
   });
-  document.getElementById("gatePw").focus();
-})();
+
+  // 回到前景時從雲端重抓（不打斷拖曳）
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState==="visible" && fbUser && !sort){
+      cloudLoad().then(()=>{ purgeOld(); renderAll(); });
+    }
+  });
+
+  $("#signOut").onclick = ()=>{ if(confirm("要登出嗎？資料已存雲端，下次用密碼登入即可。")) auth.signOut(); };
+  $("#cloudRefresh").onclick = async ()=>{ if(!fbUser) return toast("尚未登入"); await cloudLoad(); purgeOld(); renderAll(); toast("已從雲端重新整理"); };
+}else{
+  // Firebase 載入失敗 → 退回純本機版，App 仍可用
+  showLogin(false);
+  if(purgeOld()>0) save();
+  renderAll();
+  applyUrlImport();
+}
 </script>
 
 </body>
