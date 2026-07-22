@@ -860,9 +860,54 @@ function renderAll(){
   document.documentElement.dataset.book = ui.book;
   renderSummary(); renderCats(); renderList(); renderRec(); renderStat(); renderSetCats();
 }
+/* ---------- 連結一鍵匯入（#imp=base64，過密碼閘門後才觸發、新增不覆蓋、同批不重複） ---------- */
+function applyUrlImport(){
+  const m = (location.hash || "").match(/[#&]imp=([^&]+)/);
+  if(!m) return;
+  let p;
+  try{ p = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); }
+  catch(e){ return; }
+  try{ history.replaceState(null, "", location.pathname + location.search); }catch(e){}
+  const start = ()=> confirmImport(p);
+  if(document.getElementById("gate")){
+    const t = setInterval(()=>{ if(!document.getElementById("gate")){ clearInterval(t); start(); } }, 250);
+    setTimeout(()=> clearInterval(t), 60000);
+  }else start();
+}
+function confirmImport(p){
+  if(!p || !p.book || !S.books[p.book]) return;
+  S.imported = S.imported || {};
+  if(p.bid && S.imported[p.bid]) return toast("這批資料已經匯入過了");
+  const bk = S.books[p.book];
+  const items = [];
+  ["income","expense"].forEach(tp=>{
+    const obj = p[tp]; if(!obj) return;
+    Object.keys(obj).forEach(cat=>{
+      const amt = Math.abs(Math.round(Number(obj[cat]))); if(!amt) return;
+      items.push({tp, cat, amt});
+    });
+  });
+  if(!items.length) return;
+  const bkName = bk.name || p.book;
+  const mLabel = p.month ? `${p.month.split("-")[0]} 年 ${Number(p.month.split("-")[1])} 月` : "";
+  const incN = items.filter(x=>x.tp==="income").length, expN = items.length - incN;
+  if(!confirm(`要把「${bkName}」${mLabel} 的 ${items.length} 筆資料匯入嗎？\n（收入 ${incN} 筆／支出 ${expN} 筆，會新增、不會蓋掉現有紀錄）`)) return;
+  const date = (p.month || ymd(today).slice(0,7)) + "-01";
+  items.forEach(x=>{
+    if(!bk.cats[x.tp].includes(x.cat)) bk.cats[x.tp].push(x.cat);
+    bk.entries.push({ id:uid(), date, type:x.tp, cat:x.cat, amount:x.amt, note:(p.note||"匯入"), imp:true });
+  });
+  if(p.bid) S.imported[p.bid] = true;
+  ui.book = p.book; if(p.month) ui.month = p.month; ui.cat = null;
+  document.querySelectorAll(".book-btn").forEach(b=> b.setAttribute("aria-pressed", String(b.dataset.book === ui.book)));
+  save(); renderAll();
+  toast(`已匯入 ${items.length} 筆到「${bkName}」`);
+}
+
 $("#dateIn").value = ymd(today);
 resetCalc();
 renderAll();
+applyUrlImport();
 </script>
 
 <div id="gate" style="position:fixed;inset:0;z-index:999;background:var(--paper,#fff);display:grid;place-items:center;padding:24px">
