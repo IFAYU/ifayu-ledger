@@ -27,6 +27,7 @@
 }
 :root[data-book="rolmie"]{ --accent:#C2607A; --accent-soft:#F7E3E8; --accent-ink:#8E3F55; }
 :root[data-book="stock"]{ --accent:#4F7CA6; --accent-soft:#E7EFF5; --accent-ink:#325873; }
+:root[data-book="apparel"]{ --accent:#7E6BA6; --accent-soft:#EBE7F5; --accent-ink:#4E3F73; }
 
 @media (prefers-color-scheme:dark){
   :root{
@@ -40,6 +41,7 @@
   }
   :root[data-book="rolmie"]{ --accent:#DE8AA1; --accent-soft:#3B262C; --accent-ink:#F0B3C3; }
   :root[data-book="stock"]{ --accent:#7EB2DA; --accent-soft:#233240; --accent-ink:#BFE1F5; }
+  :root[data-book="apparel"]{ --accent:#A896D4; --accent-soft:#2C2740; --accent-ink:#D6CBF0; }
 }
 :root[data-theme="dark"]{
   --paper:#171512; --card:#211E1A; --sunk:#2A2621;
@@ -52,6 +54,7 @@
 }
 :root[data-theme="dark"][data-book="rolmie"]{ --accent:#DE8AA1; --accent-soft:#3B262C; --accent-ink:#F0B3C3; }
 :root[data-theme="dark"][data-book="stock"]{ --accent:#7EB2DA; --accent-soft:#233240; --accent-ink:#BFE1F5; }
+:root[data-theme="dark"][data-book="apparel"]{ --accent:#A896D4; --accent-soft:#2C2740; --accent-ink:#D6CBF0; }
 :root[data-theme="light"]{
   --paper:#F6F3EE; --card:#FFFFFF; --sunk:#EDE8E0;
   --ink:#2B2723; --ink-2:#6A625A; --ink-3:#9A9086;
@@ -63,6 +66,7 @@
 }
 :root[data-theme="light"][data-book="rolmie"]{ --accent:#C2607A; --accent-soft:#F7E3E8; --accent-ink:#8E3F55; }
 :root[data-theme="light"][data-book="stock"]{ --accent:#4F7CA6; --accent-soft:#E7EFF5; --accent-ink:#325873; }
+:root[data-theme="light"][data-book="apparel"]{ --accent:#7E6BA6; --accent-soft:#EBE7F5; --accent-ink:#4E3F73; }
 
 *{box-sizing:border-box}
 body{
@@ -238,6 +242,7 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
       <button class="book-btn" data-book="luoli" aria-pressed="true">蘿荔<span class="sub">ROLIE</span></button>
       <button class="book-btn" data-book="rolmie" aria-pressed="false">ROLMIE<span class="sub">蘿覓</span></button>
       <button class="book-btn" data-book="stock" aria-pressed="false">股票<span class="sub">收益表</span></button>
+      <button class="book-btn" data-book="apparel" aria-pressed="false">服飾<span class="sub">APPAREL</span></button>
     </div>
     <div class="monthbar">
       <button id="prevM" aria-label="上個月">‹</button>
@@ -414,6 +419,14 @@ const SEED = {
     cats:{
       income:["股票","期貨","其他"],
       expense:["股票","期貨","其他"]
+    },
+    entries:[], recurring:[]
+  },
+  apparel:{
+    name:"服飾",
+    cats:{
+      income:["衣服","褲子","鞋子","包裝袋","大陸運費","郵局運費","711運費","其他"],
+      expense:["其他"]
     },
     entries:[], recurring:[]
   }
@@ -916,6 +929,7 @@ $("#nextM").onclick = ()=> shiftMonth(1);
 function renderAll(){
   Object.values(S.books).forEach(b=>{ if(!b.cats.extra) b.cats.extra = ["學生叫貨"]; });  // 舊資料補「學生叫貨」分類欄
   if(!S.books.stock){ S.books.stock = structuredClone(SEED.stock); save(); }             // 舊資料補「股票收益表」帳本
+  if(!S.books.apparel){ S.books.apparel = structuredClone(SEED.apparel); save(); }        // 舊資料補「服飾」帳本
   document.documentElement.dataset.book = ui.book;
   renderSummary(); renderCats(); renderList(); renderRec(); renderStat(); renderSetCats();
 }
