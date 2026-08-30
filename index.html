@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="雙帳本記帳">
+<meta name="apple-mobile-web-app-title" content="App">
 <meta name="theme-color" content="#F6F3EE">
 <meta name="robots" content="noindex,nofollow,noarchive">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128241;</text></svg>">
 </head>
 <body>
 <title>雙帳本記帳｜蘿荔 × ROLMIE</title>
@@ -281,6 +281,7 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
         </div>
         <input type="text" id="noteIn" placeholder="備註（選填，例如「7月房租」）" autocomplete="off">
         <input type="date" id="dateIn" aria-label="日期">
+        <button type="button" class="btn ghost" id="scanReceipt" style="width:100%;margin-top:8px">📷 拍收據自動辨識</button>
       </div>
       <div class="pad">
         <button class="key op" data-k="AC">AC</button>
@@ -352,6 +353,17 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
       <p class="hint" style="padding-top:0">資料即時同步到你的私人雲端（Firebase），手機／電腦／自動化程式讀寫同一份。只保留最近 2 個月，較舊的自動清除。</p>
     </div>
     <div class="card">
+      <div class="card-h"><h2>拍收據辨識</h2></div>
+      <div class="entry" style="padding:0 4px">
+        <input type="text" id="geminiKeyIn" placeholder="貼上你的 Gemini API Key" autocomplete="off">
+      </div>
+      <div class="bar" style="border-top:none">
+        <button class="btn ghost" id="geminiKeySave" style="flex:1">儲存</button>
+        <button class="btn ghost" id="geminiKeyClear" style="flex:1">清除</button>
+      </div>
+      <p class="hint" style="padding-top:0">「記一筆」畫面的拍收據辨識功能需要你自己的 Gemini API Key（<a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a> 免費申請）。Key 只存在這台裝置的瀏覽器裡，直接從瀏覽器呼叫 Google，不會經過任何伺服器。</p>
+    </div>
+    <div class="card">
       <div class="card-h"><h2>資料備份</h2></div>
       <div class="bar" style="border-top:none">
         <button class="btn ghost" id="expJson" style="flex:1">匯出備份檔</button>
@@ -373,6 +385,7 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
 <dialog id="dlg"><form method="dialog" class="dlg-b" id="dlgForm"></form></dialog>
 <div class="toast" id="toast"></div>
 <input type="file" id="fileIn" accept="application/json" hidden>
+<input type="file" id="receiptIn" accept="image/*" capture="environment" hidden>
 
 <!-- Firebase SDK（雲端同步） -->
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
@@ -869,6 +882,89 @@ $("#fileIn").onchange = ev=>{
   };
   fr.readAsText(f);
   ev.target.value = "";
+};
+
+/* ---------- 拍收據 AI 辨識 ---------- */
+const GKEY_LS = "bookkeeping.geminiKey.v1";
+const getGeminiKey = () => localStorage.getItem(GKEY_LS) || "";
+$("#geminiKeyIn").value = getGeminiKey();
+$("#geminiKeySave").onclick = ()=>{
+  const v = $("#geminiKeyIn").value.trim();
+  if(!v) return toast("先貼上 Key 再儲存");
+  localStorage.setItem(GKEY_LS, v);
+  toast("已儲存，只留在這台裝置");
+};
+$("#geminiKeyClear").onclick = ()=>{
+  localStorage.removeItem(GKEY_LS);
+  $("#geminiKeyIn").value = "";
+  toast("已清除");
+};
+
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const fr = new FileReader();
+    fr.onload = ()=> resolve(fr.result.split(",")[1]);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+async function scanReceipt(file){
+  let key = getGeminiKey();
+  if(!key){
+    key = (prompt("第一次使用要先貼上你的 Gemini API Key（aistudio.google.com/apikey 免費申請，之後可以到「設定」修改）：") || "").trim();
+    if(!key) return;
+    localStorage.setItem(GKEY_LS, key);
+    $("#geminiKeyIn").value = key;
+  }
+  toast("辨識中…");
+  try{
+    const b64 = await fileToBase64(file);
+    const cats = B().cats[ui.type];
+    const prompt_ = `你是記帳辨識助手。這是一張收據或發票照片，請辨識：\n`
+      + `1. amount：總金額，整數，新台幣元。如果收據明顯是外幣（例如日圓、美金），把辨識到的原始金額直接填進 amount（不要換算匯率），並在 note 註明幣別。\n`
+      + `2. note：10 個字以內的消費項目摘要（例如「全家 咖啡兩杯」）。\n`
+      + `3. date：收據上的日期，格式 YYYY-MM-DD；看不出來就填空字串。\n`
+      + `4. category：從這個清單挑一個最接近的分類，只能填清單裡的字串：${JSON.stringify(cats)}\n`
+      + `用嚴格 JSON 回覆，不要有任何其他文字或 markdown 符號：{"amount":整數,"note":"字串","date":"字串","category":"字串"}`;
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        contents: [{parts: [
+          {text: prompt_},
+          {inline_data: {mime_type: file.type || "image/jpeg", data: b64}}
+        ]}],
+        generationConfig: {responseMimeType: "application/json"}
+      })
+    });
+    if(!res.ok){
+      const errBody = await res.text().catch(()=>"");
+      throw new Error(`Gemini API ${res.status}：${errBody.slice(0,200)}`);
+    }
+    const data = await res.json();
+    const text = data && data.candidates && data.candidates[0] && data.candidates[0].content
+      && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+      && data.candidates[0].content.parts[0].text;
+    if(!text) throw new Error("Gemini 沒有回傳可用內容");
+    const parsed = JSON.parse(text);
+    if(!parsed.amount || isNaN(parsed.amount)) throw new Error("辨識不出金額，請手動輸入");
+
+    calc = {acc:0, op:null, cur: String(Math.round(Math.abs(parsed.amount)))};
+    showAmt();
+    if(parsed.category && cats.includes(parsed.category)){ ui.cat = parsed.category; renderCats(); }
+    if(parsed.note) $("#noteIn").value = parsed.note;
+    if(parsed.date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.date)) $("#dateIn").value = parsed.date;
+    toast("辨識完成，請確認金額分類後再按「記一筆」");
+  }catch(err){
+    toast("辨識失敗：" + (err.message || err));
+  }
+}
+$("#scanReceipt").onclick = ()=> $("#receiptIn").click();
+$("#receiptIn").onchange = ev=>{
+  const f = ev.target.files[0];
+  ev.target.value = "";
+  if(f) scanReceipt(f);
 };
 
 /* ---------- 通用對話框 ---------- */
