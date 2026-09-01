@@ -260,8 +260,8 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
       </div>
     </div>
     <div class="sum-rows">
-      <div><div class="k">收入</div><div class="v num gain" id="incV">$0</div></div>
-      <div><div class="k">支出</div><div class="v num loss" id="expV">$0</div></div>
+      <div><div class="k" id="incK">收入</div><div class="v num gain" id="incV">$0</div></div>
+      <div><div class="k" id="expK">支出</div><div class="v num loss" id="expV">$0</div></div>
     </div>
   </section>
 
@@ -321,11 +321,11 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
   <!-- 統計 -->
   <section class="pane" id="pane-stat">
     <div class="card">
-      <div class="card-h"><h2>收入組成</h2><span class="pct num" id="statIncTot"></span></div>
+      <div class="card-h"><h2 id="statIncH">收入組成</h2><span class="pct num" id="statIncTot"></span></div>
       <div id="statInc"></div>
     </div>
     <div class="card">
-      <div class="card-h"><h2>支出組成</h2><span class="pct num" id="statExpTot"></span></div>
+      <div class="card-h"><h2 id="statExpH">支出組成</h2><span class="pct num" id="statExpTot"></span></div>
       <div id="statExp"></div>
     </div>
   </section>
@@ -602,9 +602,27 @@ function beginCatDrag(btn, cat, list, sx, sy){
   document.addEventListener("pointercancel", end);
 }
 
-const TYPE_LABEL = { income:"收入", expense:"支出", extra:"學生叫貨" };
+// 蘿荔/ROLMIE/服飾三本帳記的是「幫公司代墊、之後領回」，收入/支出改叫代墊/還款比較貼近實際用途；
+// 股票收益表是個人買賣損益，維持原本收入/支出（2026-09-01 使用者指定範圍）。
+const TYPE_LABEL_BY_BOOK = {
+  luoli:   { income:"代墊", expense:"還款", extra:"學生叫貨" },
+  rolmie:  { income:"代墊", expense:"還款", extra:"學生叫貨" },
+  apparel: { income:"代墊", expense:"還款", extra:"學生叫貨" },
+  stock:   { income:"收入", expense:"支出", extra:"學生叫貨" },
+};
+const TYPE_LABEL = () => TYPE_LABEL_BY_BOOK[ui.book] || TYPE_LABEL_BY_BOOK.luoli;
+function applyTypeLabels(){
+  const L = TYPE_LABEL();
+  $("#incK").textContent = L.income;
+  $("#expK").textContent = L.expense;
+  $("#statIncH").textContent = L.income + "組成";
+  $("#statExpH").textContent = L.expense + "組成";
+  document.querySelectorAll('.seg button[data-t="income"]').forEach(b => b.textContent = L.income);
+  document.querySelectorAll('.seg button[data-t="expense"]').forEach(b => b.textContent = L.expense);
+  document.querySelectorAll('.seg button[data-t="extra"]').forEach(b => b.textContent = L.extra);
+}
 function newCategory(type){
-  dialog("新增" + (TYPE_LABEL[type]||"") + "分類", [
+  dialog("新增" + (TYPE_LABEL()[type]||"") + "分類", [
     {k:"name", label:"分類名稱", type:"text", required:true}
   ], v=>{
     const n = v.name.trim();
@@ -656,7 +674,7 @@ function commit(){
   });
   save(); resetCalc(); $("#noteIn").value = "";
   renderAll();
-  toast((ui.type==="income"?"收入":"支出") + " " + money(Math.abs(amt)) + " 已記下");
+  toast((ui.type==="income"?TYPE_LABEL().income:TYPE_LABEL().expense) + " " + money(Math.abs(amt)) + " 已記下");
 }
 
 /* ---------- 明細 ---------- */
@@ -742,7 +760,7 @@ function renderRec(){
     else pillTxt = "待帶入";
     const el = document.createElement("div"); el.className = "rec";
     el.innerHTML = `<span class="nm"><b>${esc(r.cat)}</b>
-        <small>每月 ${r.day} 日 · ${r.type==="income"?"收入":"支出"} ${money(r.amount)}${r.note?" · "+esc(r.note):""}</small>
+        <small>每月 ${r.day} 日 · ${r.type==="income"?TYPE_LABEL().income:TYPE_LABEL().expense} ${money(r.amount)}${r.note?" · "+esc(r.note):""}</small>
         ${planLine}</span>
       <span class="pill ${pillCls}">${pillTxt}</span>
       <button class="del" aria-label="刪除">✕</button>`;
@@ -760,8 +778,8 @@ function renderRec(){
 }
 
 $("#addRec").onclick = ()=>{
-  const cats = [...B().cats.income.map(c=>({v:"income|"+c, t:"收入 · "+c})),
-                ...B().cats.expense.map(c=>({v:"expense|"+c, t:"支出 · "+c}))];
+  const cats = [...B().cats.income.map(c=>({v:"income|"+c, t:TYPE_LABEL().income+" · "+c})),
+                ...B().cats.expense.map(c=>({v:"expense|"+c, t:TYPE_LABEL().expense+" · "+c}))];
   dialog("新增常態性項目", [
     {k:"cat", label:"分類", type:"select", options:cats},
     {k:"amount", label:"每月金額", type:"number", required:true},
@@ -1027,6 +1045,7 @@ function renderAll(){
   if(!S.books.stock){ S.books.stock = structuredClone(SEED.stock); save(); }             // 舊資料補「股票收益表」帳本
   if(!S.books.apparel){ S.books.apparel = structuredClone(SEED.apparel); save(); }        // 舊資料補「服飾」帳本
   document.documentElement.dataset.book = ui.book;
+  applyTypeLabels();
   renderSummary(); renderCats(); renderList(); renderRec(); renderStat(); renderSetCats();
 }
 /* ---------- 連結一鍵匯入（#imp=base64，過密碼閘門後才觸發、新增不覆蓋、同批不重複） ---------- */
@@ -1056,7 +1075,8 @@ function confirmImport(p){
   const bkName = bk.name || p.book;
   const mLabel = p.month ? `${p.month.split("-")[0]} 年 ${Number(p.month.split("-")[1])} 月` : "";
   const incN = items.filter(x=>x.tp==="income").length, expN = items.length - incN;
-  if(!confirm(`要把「${bkName}」${mLabel} 的 ${items.length} 筆資料匯入嗎？\n（收入 ${incN} 筆／支出 ${expN} 筆，會新增、不會蓋掉現有紀錄）`)) return;
+  const IL = TYPE_LABEL_BY_BOOK[p.book] || TYPE_LABEL_BY_BOOK.luoli;
+  if(!confirm(`要把「${bkName}」${mLabel} 的 ${items.length} 筆資料匯入嗎？\n（${IL.income} ${incN} 筆／${IL.expense} ${expN} 筆，會新增、不會蓋掉現有紀錄）`)) return;
   const date = (p.month || ymd(today).slice(0,7)) + "-01";
   items.forEach(x=>{
     if(!bk.cats[x.tp].includes(x.cat)) bk.cats[x.tp].push(x.cat);
