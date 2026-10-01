@@ -350,7 +350,7 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
         <button class="btn ghost" id="cloudRefresh" style="flex:1">從雲端重新整理</button>
         <button class="btn ghost" id="signOut" style="flex:1">登出</button>
       </div>
-      <p class="hint" style="padding-top:0">資料即時同步到你的私人雲端（Firebase），手機／電腦／自動化程式讀寫同一份。只保留最近 2 個月，較舊的自動清除。</p>
+      <p class="hint" style="padding-top:0">資料即時同步到你的私人雲端（Firebase），手機／電腦／自動化程式讀寫同一份。只保留最近 12 個月，較舊的自動清除。</p>
     </div>
     <div class="card">
       <div class="card-h"><h2>拍收據辨識</h2></div>
@@ -1095,9 +1095,9 @@ const LOGIN_EMAIL = "missyou52049@gmail.com";
 let auth=null, db=null, fbUser=null;
 const docRef = () => db.collection("ledger").doc(fbUser.uid);
 
-// 只保留最近 2 個月（本月＋上月），較舊自動清除
+// 只保留最近 12 個月（本月＋前 11 個月），較舊自動清除
 function purgeOld(){
-  const d = new Date(today.getFullYear(), today.getMonth()-1, 1);
+  const d = new Date(today.getFullYear(), today.getMonth()-11, 1);
   const cut = ymd(d).slice(0,7);
   let removed = 0;
   Object.values(S.books).forEach(b=>{
