@@ -297,6 +297,24 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
     </div>
   </section>
 
+  <!-- 寄樣品（僅蘿覓帳本、僅「記一筆」頁）：選商品＋數量，成本自動算進廣告預算 -->
+  <section id="pane-sample" hidden style="padding:0 14px 14px">
+    <div class="card">
+      <div class="card-h"><h2>🎁 寄樣品／送網紅</h2></div>
+      <input type="text" id="smWho" placeholder="收件人（例如：網紅 小美）" autocomplete="off" style="width:100%;margin-bottom:8px">
+      <div id="smRows"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0">
+        <span style="color:var(--ink-2);font-size:13px">運費</span>
+        <input type="number" id="smShip" inputmode="numeric" min="0" placeholder="0" style="width:110px;text-align:right">
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px">
+        <span>商品成本 <b class="num" id="smCost">$0</b> ＋ 運費 <b class="num" id="smShipV">$0</b></span>
+        <b class="num" id="smTotal" style="color:var(--accent-ink)">$0</b>
+      </div>
+      <button type="button" class="btn wide" id="smGo">記入廣告預算支出</button>
+    </div>
+  </section>
+
   <!-- 明細 -->
   <section class="pane" id="pane-list">
     <div class="card">
@@ -1047,6 +1065,60 @@ function renderAll(){
   document.documentElement.dataset.book = ui.book;
   applyTypeLabels();
   renderSummary(); renderCats(); renderList(); renderRec(); renderStat(); renderSetCats();
+  renderSample();
+}
+
+/* ---------- 寄樣品：商品成本取自 200_Reference/brands/rolmie/pricing.md 進貨成本 ---------- */
+const SAMPLE_PRODUCTS = [
+  { name:"極萃煥白全效敷膜", cost:355 },
+  { name:"賦活海茴香植萃油", cost:250 },
+  { name:"山茶花清舒潔膚露", cost:220 },
+  { name:"逆時全能光澤精華", cost:175 }
+];
+let smQty = SAMPLE_PRODUCTS.map(()=>0);
+function smTotals(){
+  const cost = SAMPLE_PRODUCTS.reduce((s,p,i)=> s + p.cost*smQty[i], 0);
+  const ship = Math.max(0, Math.round(parseFloat($("#smShip").value) || 0));
+  return { cost, ship };
+}
+function smRefresh(){
+  const t = smTotals();
+  $("#smCost").textContent = money(t.cost); $("#smShipV").textContent = money(t.ship);
+  $("#smTotal").textContent = money(t.cost + t.ship);
+  SAMPLE_PRODUCTS.forEach((p,i)=>{ const q = $("#smQ"+i); if(q) q.textContent = smQty[i]; });
+}
+function renderSample(){
+  const pane = $("#pane-sample"); if(!pane) return;
+  pane.hidden = ui.book !== "rolmie" || ui.pane !== "add";
+  if(pane.hidden || $("#smRows").children.length) return;
+  $("#smRows").innerHTML = SAMPLE_PRODUCTS.map((p,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)">
+      <span style="font-size:14px">${p.name}<small style="color:var(--ink-3)"> 成本${p.cost}</small></span>
+      <span style="display:flex;align-items:center;gap:10px">
+        <button type="button" class="btn ghost" data-sm="${i}" data-d="-1">−</button>
+        <b class="num" id="smQ${i}" style="min-width:20px;text-align:center">0</b>
+        <button type="button" class="btn ghost" data-sm="${i}" data-d="1">＋</button>
+      </span>
+    </div>`).join("");
+  $("#smRows").onclick = ev => {
+    const b = ev.target.closest("[data-sm]"); if(!b) return;
+    const i = +b.dataset.sm; smQty[i] = Math.max(0, smQty[i] + (+b.dataset.d)); smRefresh();
+  };
+  $("#smShip").oninput = smRefresh;
+  $("#smGo").onclick = () => {
+    const t = smTotals();
+    if(!t.cost && !t.ship) return toast("先選商品或填運費");
+    const who = $("#smWho").value.trim();
+    const items = SAMPLE_PRODUCTS.map((p,i)=> smQty[i] ? `${p.name}×${smQty[i]}` : "").filter(Boolean).join("、");
+    const date = $("#dateIn").value || ymd(today);
+    const bk = B();
+    if(!bk.cats.income.includes("樣品運費")) bk.cats.income.push("樣品運費");
+    if(t.cost) bk.entries.push({ id:uid(), date, type:"income", cat:"樣品", amount:t.cost, note:(who ? who + "：" : "") + items });
+    if(t.ship) bk.entries.push({ id:uid(), date, type:"income", cat:"樣品運費", amount:t.ship, note: who ? who + " 運費" : "樣品運費" });
+    save(); smQty = SAMPLE_PRODUCTS.map(()=>0); $("#smShip").value = ""; $("#smWho").value = "";
+    renderAll(); smRefresh();
+    toast("已記入廣告預算支出 " + money(t.cost + t.ship));
+  };
 }
 /* ---------- 連結一鍵匯入（#imp=base64，過密碼閘門後才觸發、新增不覆蓋、同批不重複） ---------- */
 function applyUrlImport(){
