@@ -317,6 +317,21 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
     </div>
   </section>
 
+  <!-- 廣告合作（僅蘿覓帳本、僅「記一筆」頁）：金額由用戶填，算進廣告預算支出 -->
+  <section id="pane-collab" hidden style="padding:0 14px 14px">
+    <div class="card">
+      <div class="card-h"><h2>🤝 廣告合作</h2></div>
+      <div style="padding:12px 15px 15px;display:flex;flex-direction:column;gap:10px">
+        <input type="text" id="cbWho" placeholder="合作對象／項目（例如：網紅 小美 合作費）" autocomplete="off">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="color:var(--ink-2);font-size:13px">金額</span>
+          <input type="number" id="cbAmt" inputmode="numeric" min="0" placeholder="0" style="width:140px;text-align:right">
+        </div>
+        <button type="button" class="btn wide" id="cbGo">記入廣告預算支出</button>
+      </div>
+    </div>
+  </section>
+
   <!-- 明細 -->
   <section class="pane" id="pane-list">
     <div class="card">
@@ -1092,7 +1107,18 @@ function smRefresh(){
 function renderSample(){
   const pane = $("#pane-sample"); if(!pane) return;
   pane.hidden = ui.book !== "rolmie" || ui.pane !== "add";
+  const cb = $("#pane-collab"); if(cb) cb.hidden = pane.hidden;
   if(pane.hidden || $("#smRows").children.length) return;
+  $("#cbGo").onclick = () => {
+    const amt = Math.max(0, Math.round(parseFloat($("#cbAmt").value) || 0));
+    if(!amt) return toast("先填金額");
+    const bk = B();
+    if(!bk.cats.income.includes("廣告合作")) bk.cats.income.push("廣告合作");
+    bk.entries.push({ id:uid(), date:$("#dateIn").value || ymd(today), type:"income", cat:"廣告合作", amount:amt, note:$("#cbWho").value.trim() });
+    save(); $("#cbAmt").value = ""; $("#cbWho").value = "";
+    renderAll();
+    toast("已記入廣告預算支出 " + money(amt));
+  };
   $("#smRows").innerHTML = SAMPLE_PRODUCTS.map((p,i)=>`
     <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)">
       <span style="font-size:14px">${p.name}<small style="color:var(--ink-3)"> 成本${p.cost}</small></span>
