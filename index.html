@@ -301,17 +301,19 @@ dialog::backdrop{background:rgba(20,17,14,.5)}
   <section id="pane-sample" hidden style="padding:0 14px 14px">
     <div class="card">
       <div class="card-h"><h2>🎁 寄樣品／送網紅</h2></div>
-      <input type="text" id="smWho" placeholder="收件人（例如：網紅 小美）" autocomplete="off" style="width:100%;margin-bottom:8px">
-      <div id="smRows"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0">
-        <span style="color:var(--ink-2);font-size:13px">運費</span>
-        <input type="number" id="smShip" inputmode="numeric" min="0" placeholder="0" style="width:110px;text-align:right">
+      <div style="padding:12px 15px 15px;display:flex;flex-direction:column;gap:10px">
+        <input type="text" id="smWho" placeholder="收件人（例如：網紅 小美）" autocomplete="off">
+        <div id="smRows"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="color:var(--ink-2);font-size:13px">運費</span>
+          <input type="number" id="smShip" inputmode="numeric" min="0" placeholder="0" style="width:110px;text-align:right">
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:10px 12px;background:var(--sunk);border-radius:10px">
+          <span>商品 <b class="num" id="smCost">$0</b> ＋ 運費 <b class="num" id="smShipV">$0</b></span>
+          <b class="num" id="smTotal" style="color:var(--accent-ink);font-size:18px">$0</b>
+        </div>
+        <button type="button" class="btn wide" id="smGo">記入廣告預算支出</button>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px">
-        <span>商品成本 <b class="num" id="smCost">$0</b> ＋ 運費 <b class="num" id="smShipV">$0</b></span>
-        <b class="num" id="smTotal" style="color:var(--accent-ink)">$0</b>
-      </div>
-      <button type="button" class="btn wide" id="smGo">記入廣告預算支出</button>
     </div>
   </section>
 
@@ -1095,9 +1097,9 @@ function renderSample(){
     <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)">
       <span style="font-size:14px">${p.name}<small style="color:var(--ink-3)"> 成本${p.cost}</small></span>
       <span style="display:flex;align-items:center;gap:10px">
-        <button type="button" class="btn ghost" data-sm="${i}" data-d="-1">−</button>
+        <button type="button" class="btn ghost" data-sm="${i}" data-d="-1" style="width:38px;padding:8px 0">−</button>
         <b class="num" id="smQ${i}" style="min-width:20px;text-align:center">0</b>
-        <button type="button" class="btn ghost" data-sm="${i}" data-d="1">＋</button>
+        <button type="button" class="btn ghost" data-sm="${i}" data-d="1" style="width:38px;padding:8px 0">＋</button>
       </span>
     </div>`).join("");
   $("#smRows").onclick = ev => {
