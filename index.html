@@ -730,7 +730,7 @@ function renderList(){
     list.forEach(e=>{
       const isX = e.type==="extra";
       const r = document.createElement("div"); r.className = "row" + (isX?" extra":"");
-      const tag = e.rid ? '<span class="tag">常態</span>' : (isX ? '<span class="tag x">叫貨</span>' : '');
+      const tag = e.rid ? '<span class="tag">常態</span>' : (isX ? '<span class="tag x">'+(/^樣品/.test(e.cat)?"樣品":"叫貨")+'</span>' : '');
       const sign = e.type==="income" ? "+" : e.type==="expense" ? "-" : "";
       r.innerHTML = `${tag}
         <span class="nm"><b>${esc(e.cat)}</b>${e.note ? `<small>${esc(e.note)}</small>` : ""}</span>
@@ -1140,12 +1140,14 @@ function renderSample(){
     const items = SAMPLE_PRODUCTS.map((p,i)=> smQty[i] ? `${p.name}×${smQty[i]}` : "").filter(Boolean).join("、");
     const date = $("#dateIn").value || ymd(today);
     const bk = B();
-    if(!bk.cats.income.includes("樣品運費")) bk.cats.income.push("樣品運費");
-    if(t.cost) bk.entries.push({ id:uid(), date, type:"income", cat:"樣品", amount:t.cost, note:(who ? who + "：" : "") + items });
-    if(t.ship) bk.entries.push({ id:uid(), date, type:"income", cat:"樣品運費", amount:t.ship, note: who ? who + " 運費" : "樣品運費" });
+    bk.cats.extra = bk.cats.extra || [];
+    ["樣品","樣品運費"].forEach(c => { if(!bk.cats.extra.includes(c)) bk.cats.extra.push(c); });
+    /* type:"extra"＝只記錄、不計入代墊/還款合計（只拿去扣廣告預算） */
+    if(t.cost) bk.entries.push({ id:uid(), date, type:"extra", cat:"樣品", amount:t.cost, note:(who ? who + "：" : "") + items });
+    if(t.ship) bk.entries.push({ id:uid(), date, type:"extra", cat:"樣品運費", amount:t.ship, note: who ? who + " 運費" : "樣品運費" });
     save(); smQty = SAMPLE_PRODUCTS.map(()=>0); $("#smShip").value = ""; $("#smWho").value = "";
     renderAll(); smRefresh();
-    toast("已記入廣告預算支出 " + money(t.cost + t.ship));
+    toast("已記錄樣品費（不計入代墊），扣廣告預算 " + money(t.cost + t.ship));
   };
 }
 /* ---------- 連結一鍵匯入（#imp=base64，過密碼閘門後才觸發、新增不覆蓋、同批不重複） ---------- */
